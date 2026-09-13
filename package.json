@@ -1,0 +1,15 @@
+{
+  "name": "la-percha-tienda",
+  "version": "0.1.0",
+  "private": true,
+  "description": "La Percha — tienda online estática: catálogo, carrito y pedido directo por Instagram. HTML/CSS/JS puro.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
