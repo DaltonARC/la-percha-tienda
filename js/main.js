@@ -4,7 +4,6 @@
 const CONFIG = {
   storeName: "La Percha",
   instagramDefaultAccounts: [{ id: "ig_seed", username: "janicegp18" }],
-  adminPasscode: "1234",                           // <-- CAMBIAR: clave para entrar al panel admin
   currency: "RD$"
 };
 
@@ -275,10 +274,30 @@ function showToast(msg){
 }
 
 /* =========================================================
-   ADMIN — acceso con clave simple (CONFIG.adminPasscode)
-   Nota: pensado para validación/demo. Los productos se guardan
-   en localStorage de este navegador.
+   ADMIN — acceso con clave enrolada (SHA-256 + salt)
+   La primera vez que se entra se registra la clave en
+   localStorage (lapercha_admin_cred). Requiere secure
+   context (https o localhost) para crypto.subtle.
    ========================================================= */
+async function hashPasscode(pass, salt){
+  const data = new TextEncoder().encode(salt + pass);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+}
+async function enrollAdminPasscode(pass){
+  const saltBytes = new Uint8Array(16);
+  crypto.getRandomValues(saltBytes);
+  const salt = Array.from(saltBytes, b => b.toString(16).padStart(2, "0")).join("");
+  const hash = await hashPasscode(pass, salt);
+  const cred = { salt, hash };
+  localStorage.setItem(LS_ADMIN_CRED, JSON.stringify(cred));
+  return cred;
+}
+async function verifyAdminPasscode(pass, cred){
+  const hash = await hashPasscode(pass, cred.salt);
+  return hash === cred.hash;
+}
+
 function openAdmin(){
   document.getElementById("adminOverlay").classList.add("show");
   if(sessionStorage.getItem(LS_AUTH)==="1"){ renderAdminPanel(); }
@@ -287,20 +306,46 @@ function openAdmin(){
 function closeAdmin(){ document.getElementById("adminOverlay").classList.remove("show"); }
 
 function renderAdminLogin(){
+  const hasCred = !!localStorage.getItem(LS_ADMIN_CRED);
   document.getElementById("adminBody").innerHTML = `
     <h2 style="font-size:22px;">Acceso administrador</h2>
     <div class="admin-login">
-      <p style="font-size:13px;color:#6b6250;">Introduce la clave para gestionar los productos.</p>
-      <input type="password" id="passInput" placeholder="••••" maxlength="12" onkeydown="if(event.key==='Enter')tryLogin()">
+      <p style="font-size:13px;color:#6b6250;">${hasCred ? "Introduce la clave de administrador." : "Registra la clave la primera vez para habilitar el panel."}</p>
+      <input type="password" id="passInput" placeholder="••••" maxlength="64" onkeydown="if(event.key==='Enter')tryLogin()">
       <button class="btn-primary" onclick="tryLogin()">Entrar</button>
     </div>
   `;
   setTimeout(()=>document.getElementById("passInput")?.focus(), 50);
 }
-function tryLogin(){
+async function tryLogin(){
   const val = document.getElementById("passInput").value;
-  if(val === CONFIG.adminPasscode){
-    sessionStorage.setItem(LS_AUTH,"1");
+  if(!val){ showToast("Introduce una clave"); return; }
+  if(!window.isSecureContext){
+    showToast("La gestión de claves requiere https o localhost (secure context)");
+    return;
+  }
+  const raw = localStorage.getItem(LS_ADMIN_CRED);
+  if(!raw){
+    try{
+      await enrollAdminPasscode(val);
+    }catch(e){
+      showToast("No se pudo registrar la clave en este contexto (https o localhost)");
+      return;
+    }
+    sessionStorage.setItem(LS_AUTH, "1");
+    renderAdminPanel();
+    showToast("Clave registrada — ya podés gestionar la tienda");
+    return;
+  }
+  let cred = null;
+  try{ cred = JSON.parse(raw); }catch(e){ cred = null; }
+  if(!cred || !cred.salt || !cred.hash){
+    showToast("La clave guardada está dañada — borrá " + LS_ADMIN_CRED + " y registrala de nuevo");
+    return;
+  }
+  const ok = await verifyAdminPasscode(val, cred);
+  if(ok){
+    sessionStorage.setItem(LS_AUTH, "1");
     renderAdminPanel();
   } else {
     showToast("Clave incorrecta");
