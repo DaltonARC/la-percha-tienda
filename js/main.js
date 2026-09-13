@@ -3,7 +3,7 @@
    ========================================================= */
 const CONFIG = {
   storeName: "La Percha",
-  instagramUsername: "TU_USUARIO_DE_INSTAGRAM",   // <-- CAMBIAR: sin @ y sin espacios
+  instagramDefaultAccounts: [{ id: "ig_seed", username: "janicegp18" }],
   adminPasscode: "1234",                           // <-- CAMBIAR: clave para entrar al panel admin
   currency: "RD$"
 };
@@ -14,7 +14,10 @@ const CONFIG = {
    ========================================================= */
 const LS_PRODUCTS = "lapercha_products";
 const LS_CART = "lapercha_cart";
-const LS_AUTH = "lapercha_admin_auth";
+const LS_AUTH = "lapercha_admin_auth_v2";
+const LS_IG_ACCOUNTS = "lapercha_ig_accounts";
+const LS_IG_ACTIVE = "lapercha_ig_active";
+const LS_ADMIN_CRED = "lapercha_admin_cred";
 
 const seedProducts = [
   {id:"p1", name:"Camisa Oversize Mango", category:"Camisas", price:1500, sizes:["S","M","L","XL"], stock:8, desc:"Camisa oversize de algodón, corte ancho, ideal para el calor de Santiago.", images:["https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600"]},
@@ -36,6 +39,50 @@ let activeCategory = "Todos";
 let currentProduct = null;
 let selectedSize = null;
 let selectedQty = 1;
+
+/* =========================================================
+   CUENTAS DE INSTAGRAM — destino del checkout
+   (seed desde CONFIG.instagramDefaultAccounts al primer
+   arranque; se gestionan desde el panel admin)
+   ========================================================= */
+function normalizeUsername(raw){
+  return String(raw || "").trim().replace(/^@/, "").replace(/\s+/g, "").toLowerCase();
+}
+function isValidInstagramUsername(u){
+  return /^[A-Za-z0-9._]{1,30}$/.test(u);
+}
+function loadInstagramAccounts(){
+  const raw = localStorage.getItem(LS_IG_ACCOUNTS);
+  if(!raw){
+    const seed = CONFIG.instagramDefaultAccounts.map(a => ({ id: a.id, username: normalizeUsername(a.username) }));
+    localStorage.setItem(LS_IG_ACCOUNTS, JSON.stringify(seed));
+    return seed;
+  }
+  try{
+    return JSON.parse(raw).map(a => ({ id: a.id, username: normalizeUsername(a.username) }))
+      .filter(a => a.id && isValidInstagramUsername(a.username));
+  }catch(e){
+    return CONFIG.instagramDefaultAccounts.map(a => ({ id: a.id, username: normalizeUsername(a.username) }));
+  }
+}
+function saveInstagramAccounts(list){ localStorage.setItem(LS_IG_ACCOUNTS, JSON.stringify(list)); }
+function getActiveInstagramAccount(){
+  const activeId = localStorage.getItem(LS_IG_ACTIVE);
+  const stored = instagramAccounts.find(a => a.id === activeId);
+  if(stored) return stored;
+  if(instagramAccounts.length > 0){
+    const promoted = instagramAccounts[0];
+    localStorage.setItem(LS_IG_ACTIVE, promoted.id);
+    return promoted;
+  }
+  return null;
+}
+function setActiveInstagramAccount(id){
+  if(!instagramAccounts.some(a => a.id === id)) return false;
+  localStorage.setItem(LS_IG_ACTIVE, id);
+  return true;
+}
+let instagramAccounts = loadInstagramAccounts();
 
 function saveCart(){ localStorage.setItem(LS_CART, JSON.stringify(cart)); updateCartCount(); }
 function money(cents){ return CONFIG.currency + " " + (cents).toLocaleString("es-DO"); }
@@ -170,14 +217,17 @@ function renderCart(){
     </div>
   `).join("");
   const subtotal = cart.reduce((a,i)=>a+i.price*i.qty,0);
+  const igAccount = getActiveInstagramAccount();
   footEl.innerHTML = `
     <div class="shipping-label">
       <div class="to">📦 Se enviará a Instagram</div>
-      Al confirmar, copiamos tu pedido y abrimos el chat de
-      <span class="ig">@${CONFIG.instagramUsername}</span> para que cierres la compra.
+      ${igAccount
+        ? `Al confirmar, copiamos tu pedido y abrimos el chat de
+           <span class="ig">@${igAccount.username}</span> para que cierres la compra.`
+        : `<div>Configurá una cuenta de Instagram en el panel admin</div>`}
     </div>
     <div class="subtotal-row"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
-    <button class="btn-primary" onclick="checkout()">Enviar pedido por Instagram</button>
+    <button class="btn-primary" onclick="checkout()" ${igAccount ? "" : "disabled"}>Enviar pedido por Instagram</button>
   `;
 }
 function cartQty(idx,d){
@@ -189,12 +239,17 @@ function cartRemove(idx){ cart.splice(idx,1); saveCart(); renderCart(); }
 
 function checkout(){
   if(cart.length===0) return;
+  const igAccount = getActiveInstagramAccount();
+  if(!igAccount){
+    showToast("Configurá una cuenta de Instagram en el panel admin");
+    return;
+  }
   const lines = cart.map(i => `• ${i.name} (Talla ${i.size}) x${i.qty} — ${money(i.price*i.qty)}`);
   const total = cart.reduce((a,i)=>a+i.price*i.qty,0);
   const text = `¡Hola! Quiero hacer este pedido 🛍️\n\n${lines.join("\n")}\n\nTotal: ${money(total)}`;
 
   const finish = () => {
-    window.open(`https://instagram.com/${CONFIG.instagramUsername}`, "_blank");
+    window.open(`https://instagram.com/${igAccount.username}`, "_blank");
   };
 
   if(navigator.clipboard && window.isSecureContext){
@@ -280,9 +335,11 @@ function renderAdminPanel(){
       </div>
     </form>
     <div class="admin-list" id="adminList"></div>
+    <div id="adminAccounts"></div>
   `;
   renderAdminThumbs();
   renderAdminList();
+  renderAdminAccounts();
 }
 
 function handleImages(e){
@@ -384,6 +441,127 @@ function renderAdminList(){
       </div>
     </div>
   `).join("");
+}
+
+/* =========================================================
+   ADMIN — cuentas de Instagram destino
+   ========================================================= */
+function renderAdminAccounts(){
+  const wrap = document.getElementById("adminAccounts");
+  if(!wrap) return;
+  wrap.innerHTML = `
+    <h3 class="admin-section-title">Cuentas de Instagram</h3>
+    <form class="admin-form admin-accounts-form" onsubmit="return addInstagramAccount(event)">
+      <div class="full">
+        <label>Cuenta destino para el checkout (sin @)</label>
+        <div class="ig-add-row">
+          <input id="igNewUsername" placeholder="@usuario" required>
+          <button type="submit" class="btn-primary ig-add-btn">Agregar</button>
+        </div>
+      </div>
+    </form>
+    <div class="admin-list" id="igAdminList"></div>
+  `;
+  renderIgList();
+}
+function renderIgList(){
+  const list = document.getElementById("igAdminList");
+  if(!list) return;
+  if(instagramAccounts.length===0){
+    list.innerHTML = `<p style="color:#6b6250;font-size:13px;">Aún no hay cuentas de Instagram.</p>`;
+    return;
+  }
+  const activeId = localStorage.getItem(LS_IG_ACTIVE);
+  list.innerHTML = instagramAccounts.map(a => `
+    <div class="admin-row" data-id="${a.id}">
+      <div class="info">
+        <div class="n">@${a.username} ${a.id===activeId ? '<span class="ig-badge">ACTIVA</span>' : ''}</div>
+        <div class="m">${a.id}</div>
+      </div>
+      <div class="actions">
+        ${a.id!==activeId ? `<button class="mini-btn" title="Hacer activa" onclick="selectActiveAccount('${a.id}')">Hacer activa</button>` : ''}
+        <button class="icon-btn" title="Editar" onclick="editInstagramAccount('${a.id}')">✏️</button>
+        <button class="icon-btn danger" title="Eliminar" onclick="deleteInstagramAccount('${a.id}')">🗑️</button>
+      </div>
+    </div>
+  `).join("");
+}
+function addInstagramAccount(e){
+  e.preventDefault();
+  const input = document.getElementById("igNewUsername");
+  const username = normalizeUsername(input.value);
+  if(!isValidInstagramUsername(username)){
+    showToast("Usuario de Instagram inválido — solo letras, números, puntos y guion bajo (máx. 30)");
+    return false;
+  }
+  if(instagramAccounts.some(a => a.username.toLowerCase() === username)){
+    showToast("Esa cuenta ya está en la lista");
+    return false;
+  }
+  instagramAccounts.push({ id: "ig_" + Date.now(), username });
+  saveInstagramAccounts(instagramAccounts);
+  input.value = "";
+  renderIgList();
+  renderCart();
+  showToast("Cuenta agregada");
+  return false;
+}
+function editInstagramAccount(id){
+  const row = document.querySelector(`#igAdminList .admin-row[data-id="${id}"]`);
+  const a = instagramAccounts.find(x => x.id === id);
+  if(!row || !a) return;
+  row.innerHTML = `
+    <div class="info" style="flex:1; min-width:0;">
+      <input id="igEditInput" value="${a.username}" maxlength="30" onkeydown="if(event.key==='Enter')saveInstagramAccountEdit('${id}')">
+    </div>
+    <div class="actions">
+      <button class="icon-btn" title="Guardar" onclick="saveInstagramAccountEdit('${id}')">💾</button>
+      <button class="icon-btn danger" title="Cancelar" onclick="renderIgList()">✕</button>
+    </div>
+  `;
+  const edit = document.getElementById("igEditInput");
+  if(edit) edit.focus();
+}
+function saveInstagramAccountEdit(id){
+  const input = document.getElementById("igEditInput");
+  if(!input) return;
+  const username = normalizeUsername(input.value);
+  if(!isValidInstagramUsername(username)){
+    showToast("Usuario de Instagram inválido — solo letras, números, puntos y guion bajo (máx. 30)");
+    return;
+  }
+  if(instagramAccounts.some(a => a.id!==id && a.username.toLowerCase() === username)){
+    showToast("Esa cuenta ya está en la lista");
+    return;
+  }
+  const a = instagramAccounts.find(x => x.id === id);
+  if(a){
+    a.username = username;
+    saveInstagramAccounts(instagramAccounts);
+  }
+  renderIgList();
+  renderCart();
+  showToast("Cuenta actualizada");
+}
+function deleteInstagramAccount(id){
+  if(!confirm("¿Eliminar esta cuenta de Instagram? Esta acción no se puede deshacer.")) return;
+  instagramAccounts = instagramAccounts.filter(a => a.id !== id);
+  saveInstagramAccounts(instagramAccounts);
+  if(localStorage.getItem(LS_IG_ACTIVE) === id){
+    localStorage.removeItem(LS_IG_ACTIVE);
+    const next = getActiveInstagramAccount();
+    if(next) setActiveInstagramAccount(next.id);
+  }
+  renderIgList();
+  renderCart();
+  showToast("Cuenta eliminada");
+}
+function selectActiveAccount(id){
+  if(setActiveInstagramAccount(id)){
+    renderIgList();
+    renderCart();
+    showToast("Cuenta activa actualizada");
+  }
 }
 
 /* =========================================================
