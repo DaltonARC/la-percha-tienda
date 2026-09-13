@@ -50,18 +50,27 @@ function normalizeUsername(raw){
 function isValidInstagramUsername(u){
   return /^[A-Za-z0-9._]{1,30}$/.test(u);
 }
+function isValidInstagramAccountId(id){
+  // los ids se generan internamente (ig_seed / ig_<timestamp>); validar acá
+  // evita que un id manipulado en localStorage rompa los onclick del panel
+  return typeof id === "string" && /^[A-Za-z0-9_:-]{1,64}$/.test(id);
+}
+function seedInstagramAccounts(){
+  const seed = CONFIG.instagramDefaultAccounts
+    .map(a => ({ id: a.id, username: normalizeUsername(a.username) }))
+    .filter(a => isValidInstagramAccountId(a.id) && isValidInstagramUsername(a.username));
+  localStorage.setItem(LS_IG_ACCOUNTS, JSON.stringify(seed));
+  return seed;
+}
 function loadInstagramAccounts(){
   const raw = localStorage.getItem(LS_IG_ACCOUNTS);
-  if(!raw){
-    const seed = CONFIG.instagramDefaultAccounts.map(a => ({ id: a.id, username: normalizeUsername(a.username) }));
-    localStorage.setItem(LS_IG_ACCOUNTS, JSON.stringify(seed));
-    return seed;
-  }
+  if(!raw) return seedInstagramAccounts();
   try{
-    return JSON.parse(raw).map(a => ({ id: a.id, username: normalizeUsername(a.username) }))
-      .filter(a => a.id && isValidInstagramUsername(a.username));
+    return JSON.parse(raw)
+      .map(a => ({ id: a.id, username: normalizeUsername(a.username) }))
+      .filter(a => isValidInstagramAccountId(a.id) && isValidInstagramUsername(a.username));
   }catch(e){
-    return CONFIG.instagramDefaultAccounts.map(a => ({ id: a.id, username: normalizeUsername(a.username) }));
+    return seedInstagramAccounts();
   }
 }
 function saveInstagramAccounts(list){ localStorage.setItem(LS_IG_ACCOUNTS, JSON.stringify(list)); }
