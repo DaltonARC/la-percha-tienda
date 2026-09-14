@@ -23,15 +23,26 @@ const seedProducts = [
   {id:"p4", name:"Jean Recto Cibao", category:"Pantalones", price:1900, sizes:["28","30","32","34"], stock:5, desc:"Jean corte recto, lavado medio.", images:["https://images.unsplash.com/photo-1542272604-787c3835535d?w=600"]},
 ];
 
-function loadProducts(){
-  const raw = localStorage.getItem(LS_PRODUCTS);
-  if(!raw){ localStorage.setItem(LS_PRODUCTS, JSON.stringify(seedProducts)); return [...seedProducts]; }
-  try{ return JSON.parse(raw); }catch(e){ return [...seedProducts]; }
+function loadJSONStrict(key, fallback){
+  const raw = localStorage.getItem(key);
+  if(raw === null){
+    localStorage.setItem(key, JSON.stringify(fallback));
+    return [...fallback];
+  }
+  let parsed;
+  try{ parsed = JSON.parse(raw); }
+  catch(e){ parsed = null; }
+  if(!Array.isArray(parsed)){
+    localStorage.setItem(key, JSON.stringify(fallback));
+    return [...fallback];
+  }
+  return parsed;
 }
+function loadProducts(){ return loadJSONStrict(LS_PRODUCTS, seedProducts); }
 function saveProducts(list){ localStorage.setItem(LS_PRODUCTS, JSON.stringify(list)); }
 
 let products = loadProducts();
-let cart = JSON.parse(localStorage.getItem(LS_CART) || "[]");
+let cart = loadJSONStrict(LS_CART, []);
 let activeCategory = "Todos";
 let currentProduct = null;
 let selectedSize = null;
