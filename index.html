@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>La Percha — Tienda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">🏷️ <span>LA</span> PERCHA</div>
+  <button class="cart-btn" onclick="openCart()">
+    🛍️ Carrito <span class="cart-count" id="cartCount">0</span>
+  </button>
+</header>
+
+<section class="hero">
+  <div class="eyebrow">Nueva colección · Santiago, RD</div>
+  <h1>Viste tu <em>estilo</em>, no el molde</h1>
+  <p>Elige tus piezas, arma tu carrito y termina el pedido directo por Instagram. Nosotros nos encargamos del resto.</p>
+</section>
+
+<div class="search">
+  <input type="text" id="searchInput" placeholder="Buscar producto..." oninput="renderProducts()">
+</div>
+<div class="filters" id="filters"></div>
+
+<div id="grid" class="grid"></div>
+<div id="emptyState" class="empty-state" style="display:none;">
+  Todavía no hay productos publicados. Vuelve pronto 👀
+</div>
+
+<footer>
+  © <span id="year"></span> La Percha · Hecho para vender directo por Instagram
+  <br>
+  <button onclick="openAdmin()">Acceso administrador</button>
+</footer>
+
+<!-- ===== MODAL PRODUCTO ===== -->
+<div class="overlay" id="productOverlay">
+  <div class="modal" id="productModal"></div>
+</div>
+
+<!-- ===== CARRITO ===== -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeCart()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <h2>Tu carrito</h2>
+    <button class="drawer-close" onclick="closeCart()">✕</button>
+  </div>
+  <div class="drawer-items" id="drawerItems"></div>
+  <div class="drawer-foot" id="drawerFoot"></div>
+</div>
+
+<!-- ===== ADMIN ===== -->
+<div class="overlay admin-modal" id="adminOverlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAdmin()">✕</button>
+    <div class="modal-body" id="adminBody"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
