@@ -40,9 +40,20 @@ Abrir [http://localhost:3000](http://localhost:3000).
 
 Editar `CONFIG` al inicio de `js/main.js`:
 
-- `instagramUsername` — usuario de Instagram para el checkout (sin `@`)
-- `adminPasscode` — clave del panel de administración (demo)
+- `instagramDefaultAccounts` — cuentas de Instagram destino con las que arranca la tienda la primera vez (sin `@`). Cada cuenta: `{ id, username }`
 - `currency` — moneda a mostrar
+
+### Cuentas de Instagram
+
+- Desde el panel admin (apartado **Cuentas de Instagram**) se gestionan las cuentas destino: agregar, editar inline, eliminar y marcar una como **activa**.
+- La cuenta activa es la que usa el checkout: copia el pedido y abre `instagram.com/<usuario>` para cerrar la compra.
+- Persisten en `localStorage` (`lapercha_ig_accounts` / `lapercha_ig_active`). La primera vez se siembran desde `instagramDefaultAccounts`; si la cuenta activa se elimina, se promueve automáticamente la primera restante.
+
+### Clave de administración (enrolamiento one-time)
+
+- No hay clave hardcodeada. La primera vez que entrás al panel, el sistema registra la clave que tipeás como hash **SHA-256 + salt** en `localStorage` (`lapercha_admin_cred`).
+- Para cambiar la clave: borrá `lapercha_admin_cred` (o los datos del sitio) y volvé a entrar; la primera vez registra la nueva.
+- Requiere **secure context** para `crypto.subtle`: funciona en `https` o en `localhost` (por eso el dev server corre en `http://localhost:3000`).
 
 > Nota: el panel admin y el catálogo persisten en `localStorage` del navegador; es una validación/demo, no un backend.
 

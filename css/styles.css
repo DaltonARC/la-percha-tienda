@@ -239,6 +239,24 @@ footer button:hover{color:var(--mango);}
 .thumbs{display:flex; gap:6px; margin-top:6px;}
 .thumbs img{width:40px; height:40px; object-fit:cover; border-radius:6px; border:1px solid var(--kraft-dark);}
 
+/* cuentas de Instagram (panel admin) */
+.admin-section-title{
+  font-size:14px; font-family:'Anton',sans-serif; letter-spacing:.5px; text-transform:uppercase;
+  margin:24px 0 12px; padding-top:16px; border-top:2px solid var(--kraft-dark); color:var(--ink);
+}
+.admin-accounts-form{display:block; margin-bottom:12px;}
+.admin-accounts-form .full{margin-bottom:0;}
+.ig-add-row{display:flex; gap:8px;}
+.ig-add-row input{flex:1; min-width:0;}
+.ig-add-btn{flex:0 0 auto; width:auto; padding:9px 14px;}
+.ig-badge{
+  display:inline-block; background:var(--teal); color:#fff; font-size:10px; font-weight:800;
+  padding:2px 8px; border-radius:999px; margin-left:6px; letter-spacing:.5px; vertical-align:middle;
+}
+#igEditInput{
+  width:100%; padding:8px 10px; border-radius:8px; border:2px solid var(--kraft-dark); font-size:13px; font-family:inherit;
+}
+
 @media(max-width:480px){
   .admin-form{grid-template-columns:1fr;}
 }
