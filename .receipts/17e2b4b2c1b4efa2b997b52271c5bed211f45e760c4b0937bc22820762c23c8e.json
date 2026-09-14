@@ -1,0 +1,45 @@
+{
+  "tipo": "receipt",
+  "version": 1,
+  "decision": "APPROVED",
+  "fingerprint_final": "17e2b4b2c1b4efa2b997b52271c5bed211f45e760c4b0937bc22820762c23c8e",
+  "timestamp": "2026-09-13T21:30:00-04:00",
+  "tarea": "issue #9 — server hardening (server.js + scripts/verify-server.sh) — rama feature/9-server-hardening — SEGUNDA pasada (re-emisión tras corrección acotada autorizada)",
+  "plan_task_agent": "allowlist de rutas servibles (/, /index.html, /css/, /js/, /favicon.ico); bloqueo de dotfiles → 403 sin leer (CUALQUIER segmento, no solo primero); allowlist → 403 si existe pero no servible / 404 si no existe (desviación aprobada por jarvis); bind 127.0.0.1 por defecto vía HOST env; headers mínimos (X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Referrer-Policy: strict-origin-when-cross-origin) en todas las respuestas; scripts/verify-server.sh como smoke test (curl/ss/grep, sin deps externas)",
+  "archivos_afectados": ["server.js", "scripts/verify-server.sh"],
+  "metodo_fingerprint": "sha256 combinado determinístico (entradas ordenadas): por archivo server.js=<sha256sum server.js>, scripts/verify-server.sh=<sha256sum scripts/verify-server.sh>; línea 'ruta sha256' por archivo, sort, sha256sum del conjunto. Doble medición idéntica (17e2b4b2... en ambas, working tree quieto). .receipts/ excluido del congelado (artefacto de proceso; recibo previo b968f861... conservado como evidencia de la pasada bloqueada).",
+  "lentes": {
+    "correctitud_bugs": {
+      "agente": "review-agent (FALLBACK: ejecutada por receipt-agent — subagente no lanzable por límite de profundidad 1 en la sesión; declarado explícitamente)",
+      "veredicto": "APROBADO",
+      "evidencia": "node --check server.js → exit 0 (PASS). bash -n scripts/verify-server.sh → exit 0 (PASS). bash scripts/verify-server.sh → RESULTADO: OK, exit 0 (20+ checks: rutas públicas 200, sensibles/dotfiles 403 incl. anidados, 404 en no-existe, traversal no-200, headers, bind exclusivo, cleanup trap). Server real 127.0.0.1:3000 (PID 37336). Hallazgos menores no-bloqueantes: //server.js → 200 sirviendo index.html (quirk de URL: new URL('//x') → host='x', pathname='/'; sin fuga de código fuente); comentarios de guards numerados en orden no secuencial (Guard 1→3→2 en el flujo) — cosmético."
+    },
+    "seguridad": {
+      "agente": "security-agent (FALLBACK: ejecutada por receipt-agent — subagente no lanzable por límite de profundidad 1 en la sesión; declarado explícitamente)",
+      "veredicto": "APROBADO",
+      "evidencia": "HALLAZGO BLOQUEANTE PREVIO CERRADO (reproducido el escenario exacto de la pasada 1): creados css/.env-test y js/.DS_Store-test → curl http://127.0.0.1:3000/css/.env-test → HTTP 403, body '403 Forbidden' (sin fuga 'secret-env'); curl http://127.0.0.1:3000/js/.DS_Store-test → HTTP 403, body sin fuga 'DS_Store-junk'; cleanup rm OK. Causa corregida en server.js:48: Guard 1 ahora usa segments.some((s) => s.startsWith('.')) sobre TODOS los segmentos. Vectores adicionales: /..%2fpackage.json → 403; /%2e%2e/package.json → 403; /..%2f..%2fetc%2fpasswd → 403; /%zz → 404; /%00 → 404; /css/%2eenv-test (dotfile encodado, decodeURIComponent previo) → 403; dotfiles raíz (/.git/config, /.receipts/venta.json, /.gitignore) → 403; package.json/server.js/README.md (existen, fuera de allowlist) → 403; /no-existe.html, /favicon.ico → 404. Headers presentes en 200 (curl -D /), 403 (package.json) y 404 (no-existe.html): X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Referrer-Policy: strict-origin-when-cross-origin. Bind exclusivo: ss -tlnp → LISTEN 127.0.0.1:3000 (node pid=37336); sin listener en ::1 ni *:3000. no verificado: timing side-channel entre 403-existe y 404-no-existe (no se midió; severidad teórica mínima en dev server)."
+    },
+    "impacto_arquitectonico": {
+      "agente": "senior-review-agent (FALLBACK: ejecutada por receipt-agent — subagente no lanzable por límite de profundidad 1 en la sesión; modo readonly respetado, no se aplicó ningún cambio)",
+      "veredicto": "APROBADO (1 hallazgo MENOR)",
+      "evidencia": "Importadores: solo package.json (main='server.js', start='node server.js') — server.js es entry point standalone; sin otros módulos que lo importen (grep repo). Cambio de bind localhost→127.0.0.1 por defecto (server.js:9 'const host = process.env.HOST || \"127.0.0.1\"' + .listen(port, host) server.js:82): README.md:37 y README.md:57 aún citan http://localhost:3000 — funcional en esta máquina hoy (curl localhost:3000 → 200; localhost resuelve a ::1 sin listener pero curl cae a IPv4 por Happy Eyeballs), impacto MENOR de documentación desactualizada; override posible con HOST env. Patrón del proyecto respetado (Node vanilla type:module, engines >=18, cero dependencias nuevas). Estructura: SECURITY_HEADERS centralizado + helper send() (DRY correcto, aplicado en 200/403/404), nombres descriptivos, comentarios de por qué, catch genérico que no filtra existencia. verify-server.sh: set -u + acumulación de FAILURES + exit 1 (correcto para smoke test multi-chequeo), cleanup con trap + verificación explícita post-cleanup, portable (bash+curl+ss+grep), ahora cubre dotfiles anidados y verifica no-fuga en body."
+    },
+    "adherencia_plan": {
+      "agente": "receipt-agent (lente 4)",
+      "veredicto": "APROBADO",
+      "evidencia": "Criterios del plan vs diff real (server.js actual): allowlist exacta ALLOWED=['/','/index.html','/css/','/js/','/favicon.ico'] → CUMPLE (server.js:13); DIR_PREFIXES derivado → CUMPLE (server.js:15); bloqueo de dotfiles CUALQUIER segmento → CUMPLE (server.js:47-49: segments.some((segment) => segment.startsWith('.')) → 403 sin leer archivo — corrige exactamente la desviación de la pasada 1); 403-si-existe/404-no-existe con access(filePath) → CUMPLE (server.js:63-72); bind 127.0.0.1 por defecto vía HOST env → CUMPLE (server.js:9, verificado con ss: 127.0.0.1:3000 exclusivo); headers mínimos en 200/403/404 → CUMPLE (server.js:31-38, 76; verificado con curl -D en los 3 casos); verify-server.sh como smoke test curl/ss/grep sin deps externas → CUMPLE (bash scripts/verify-server.sh → RESULTADO: OK, exit 0). Sin desviaciones."
+    }
+  },
+  "hallazgos_no_bloqueantes": [
+    {"severidad": "MENOR", "descripcion": "//server.js (doble slash) responde 200 sirviendo index.html — no expone código fuente; quirk de new URL (//x → host=x, pathname='/')", "evidencia": "curl --path-as-is http://127.0.0.1:3000//server.js → 200, body inicia '<!DOCTYPE html>' (index.html, no código de server.js)", "archivo_linea": "server.js:30 (decodeURIComponent(new URL(req.url, 'http://localhost').pathname))"},
+    {"severidad": "MENOR", "descripcion": "Comentarios de guards numerados en orden no secuencial dentro del flujo de ejecución (Guard 3 antes que Guard 2)", "evidencia": "server.js:47-49 Guard 1, server.js:53-57 Guard 3, server.js:61-72 Guard 2 — cosmético", "archivo_linea": "server.js:53, server.js:61"},
+    {"severidad": "MENOR", "descripcion": "README.md desactualizado respecto al bind por defecto: cita http://localhost:3000 mientras el server escucha solo en 127.0.0.1 (funcional hoy por fallback IPv4 de curl; frágil si el cliente no tiene fallback)", "evidencia": "README.md:37 'Abrir http://localhost:3000', README.md:57 'curl ... http://localhost:3000/'; getent hosts localhost → '::1 localhost' (sin listener en ::1); curl localhost:3000 → 200", "archivo_linea": "README.md:37, README.md:57 (archivo NO parte del candidato congelado; nota para futura pasada)"}
+  ],
+  "correccion": {
+    "hubo": true,
+    "lineas_modificadas": "estimado ~20 (bajo el techo RECEIPT_MAX_CORRECTION_LINES=150: server.js Guard 1 ~2-5 líneas; verify-server.sh sección dotfiles anidados + trap cleanup + verificación no-fuga ~15 líneas)",
+    "que_se_corrigio": "Guard 1 de server.js ahora evalúa TODOS los segmentos del path: segments.some((segment) => segment.startsWith('.')) → server.js:48 (antes solo primer segmento → server.js:33-36 en pasada 1). verify-server.sh agrega la sección 'Dotfiles ANIDADOS' con creación de css/.env-test y js/.DS_Store-test, checks 403 + verificación de no-fuga en body y cleanup via trap.",
+    "por_que_no": null
+  },
+  "bloqueantes_pendientes": []
+}
