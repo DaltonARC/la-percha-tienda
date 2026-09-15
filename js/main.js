@@ -1,4 +1,22 @@
 /* =========================================================
+   Helpers puros extraídos a js/lib.mjs (ES module, importable
+   desde Node para tests). Este archivo se carga con
+   <script type="module"> y re-expone a window las funciones que
+   usan los onclick inline de index.html (ver bloque al final).
+   ========================================================= */
+import {
+  loadJSONStrict,
+  normalizeUsername,
+  isValidInstagramUsername,
+  isValidInstagramAccountId,
+  seedInstagramAccounts as seedInstagramAccountsFromLib,
+  loadInstagramAccounts as loadInstagramAccountsFromLib,
+  saveInstagramAccounts,
+  money as moneyFromLib,
+  hashPasscode,
+} from "./lib.mjs";
+
+/* =========================================================
    CONFIGURACIÓN — esto es lo único que hay que tocar
    ========================================================= */
 const CONFIG = {
@@ -14,7 +32,6 @@ const CONFIG = {
 const LS_PRODUCTS = "lapercha_products";
 const LS_CART = "lapercha_cart";
 const LS_AUTH = "lapercha_admin_auth_v2";
-const LS_IG_ACCOUNTS = "lapercha_ig_accounts";
 const LS_IG_ACTIVE = "lapercha_ig_active";
 const LS_ADMIN_CRED = "lapercha_admin_cred";
 
@@ -25,21 +42,6 @@ const seedProducts = [
   {id:"p4", name:"Jean Recto Cibao", category:"Pantalones", price:1900, sizes:["28","30","32","34"], stock:5, desc:"Jean corte recto, lavado medio.", images:["https://images.unsplash.com/photo-1542272604-787c3835535d?w=600"]},
 ];
 
-function loadJSONStrict(key, fallback){
-  const raw = localStorage.getItem(key);
-  if(raw === null){
-    localStorage.setItem(key, JSON.stringify(fallback));
-    return [...fallback];
-  }
-  let parsed;
-  try{ parsed = JSON.parse(raw); }
-  catch(e){ parsed = null; }
-  if(!Array.isArray(parsed)){
-    localStorage.setItem(key, JSON.stringify(fallback));
-    return [...fallback];
-  }
-  return parsed;
-}
 function loadProducts(){ return loadJSONStrict(LS_PRODUCTS, seedProducts); }
 function saveProducts(list){ localStorage.setItem(LS_PRODUCTS, JSON.stringify(list)); }
 
@@ -55,36 +57,12 @@ let selectedQty = 1;
    (seed desde CONFIG.instagramDefaultAccounts al primer
    arranque; se gestionan desde el panel admin)
    ========================================================= */
-function normalizeUsername(raw){
-  return String(raw || "").trim().replace(/^@/, "").replace(/\s+/g, "").toLowerCase();
-}
-function isValidInstagramUsername(u){
-  return /^[A-Za-z0-9._]{1,30}$/.test(u);
-}
-function isValidInstagramAccountId(id){
-  // los ids se generan internamente (ig_seed / ig_<timestamp>); validar acá
-  // evita que un id manipulado en localStorage rompa los onclick del panel
-  return typeof id === "string" && /^[A-Za-z0-9_:-]{1,64}$/.test(id);
-}
 function seedInstagramAccounts(){
-  const seed = CONFIG.instagramDefaultAccounts
-    .map(a => ({ id: a.id, username: normalizeUsername(a.username) }))
-    .filter(a => isValidInstagramAccountId(a.id) && isValidInstagramUsername(a.username));
-  localStorage.setItem(LS_IG_ACCOUNTS, JSON.stringify(seed));
-  return seed;
+  return seedInstagramAccountsFromLib(CONFIG.instagramDefaultAccounts);
 }
 function loadInstagramAccounts(){
-  const raw = localStorage.getItem(LS_IG_ACCOUNTS);
-  if(!raw) return seedInstagramAccounts();
-  try{
-    return JSON.parse(raw)
-      .map(a => ({ id: a.id, username: normalizeUsername(a.username) }))
-      .filter(a => isValidInstagramAccountId(a.id) && isValidInstagramUsername(a.username));
-  }catch(e){
-    return seedInstagramAccounts();
-  }
+  return loadInstagramAccountsFromLib(CONFIG.instagramDefaultAccounts);
 }
-function saveInstagramAccounts(list){ localStorage.setItem(LS_IG_ACCOUNTS, JSON.stringify(list)); }
 function getActiveInstagramAccount(){
   const activeId = localStorage.getItem(LS_IG_ACTIVE);
   const stored = instagramAccounts.find(a => a.id === activeId);
@@ -104,7 +82,7 @@ function setActiveInstagramAccount(id){
 let instagramAccounts = loadInstagramAccounts();
 
 function saveCart(){ localStorage.setItem(LS_CART, JSON.stringify(cart)); updateCartCount(); }
-function money(cents){ return CONFIG.currency + " " + (cents).toLocaleString("es-DO"); }
+function money(cents){ return moneyFromLib(cents, CONFIG.currency); }
 
 /* =========================================================
    RENDER TIENDA
@@ -298,12 +276,8 @@ function showToast(msg){
    La primera vez que se entra se registra la clave en
    localStorage (lapercha_admin_cred). Requiere secure
    context (https o localhost) para crypto.subtle.
+   hashPasscode se importa de lib.mjs.
    ========================================================= */
-async function hashPasscode(pass, salt){
-  const data = new TextEncoder().encode(salt + pass);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
-}
 async function enrollAdminPasscode(pass){
   const saltBytes = new Uint8Array(16);
   crypto.getRandomValues(saltBytes);
@@ -636,3 +610,70 @@ document.getElementById("year").textContent = new Date().getFullYear();
 renderFilters();
 renderProducts();
 updateCartCount();
+
+/* =========================================================
+   RE-EXPOSICIÓN GLOBAL
+   Con <script type="module"> las funciones de este archivo dejan
+   de ser globales. Los onclick inline de index.html (setCategory,
+   openProduct, cartQty, tryLogin, ...) resuelven contra window, así
+   que se re-exponen acá con los MISMOS nombres para no cambiar
+   ningún comportamiento respecto del script clásico anterior.
+   ========================================================= */
+Object.assign(window, {
+  /* helpers importados desde lib.mjs (antes globales por script clásico) */
+  loadJSONStrict,
+  normalizeUsername,
+  isValidInstagramUsername,
+  isValidInstagramAccountId,
+  seedInstagramAccounts,
+  loadInstagramAccounts,
+  saveInstagramAccounts,
+  money,
+  hashPasscode,
+  /* funciones del módulo */
+  loadProducts,
+  saveProducts,
+  getActiveInstagramAccount,
+  setActiveInstagramAccount,
+  saveCart,
+  renderFilters,
+  setCategory,
+  renderProducts,
+  openProduct,
+  closeProduct,
+  renderProductModal,
+  pickSize,
+  changeQty,
+  addToCart,
+  updateCartCount,
+  openCart,
+  closeCart,
+  renderCart,
+  cartQty,
+  cartRemove,
+  checkout,
+  showToast,
+  enrollAdminPasscode,
+  verifyAdminPasscode,
+  openAdmin,
+  closeAdmin,
+  renderAdminLogin,
+  tryLogin,
+  logoutAdmin,
+  renderAdminPanel,
+  handleImages,
+  renderAdminThumbs,
+  saveProduct,
+  editProduct,
+  cancelEdit,
+  toggleVisible,
+  deleteProduct,
+  renderAdminList,
+  renderAdminAccounts,
+  renderIgList,
+  addInstagramAccount,
+  editInstagramAccount,
+  saveInstagramAccountEdit,
+  deleteInstagramAccount,
+  selectActiveAccount,
+});
