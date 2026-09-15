@@ -18,7 +18,8 @@ la-percha-tienda/
 ├── css/
 │   └── styles.css   # Estilos extraídos del template original
 ├── js/
-│   └── main.js      # Lógica: render, carrito, admin, checkout por Instagram
+│   ├── main.js      # Lógica: render, carrito, admin, checkout por Instagram (ES module)
+│   └── lib.mjs      # Helpers puros/extraíbles (importable desde Node para tests)
 ├── server.js        # Dev server estático (sin dependencias)
 └── package.json     # Scripts + engines
 ```
@@ -67,3 +68,15 @@ Editar `CONFIG` al inicio de `js/main.js`:
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/   # → 200
 ```
+
+## Tests
+
+La suite usa el runner nativo de Node (`node --test`, sin dependencias):
+
+```bash
+npm test
+```
+
+**Qué cubre:** las funciones puras extraídas a `js/lib.mjs` — saneamiento de `localStorage` (`loadJSONStrict`), manejo de cuentas de Instagram (`normalizeUsername`, `isValidInstagramUsername`, `isValidInstagramAccountId`, `seedInstagramAccounts`, `loadInstagramAccounts`, `saveInstagramAccounts`), formato de dinero (`money`) y hash del passcode admin (`hashPasscode`, SHA-256). Los tests que usan `localStorage` inyectan un stub del global antes de importar el módulo.
+
+> La lógica de DOM (render, carrito, admin) no se testea de forma unitaria: son funciones que dependen de `document`/`window` y se validan manualmente contra la app en el browser.
