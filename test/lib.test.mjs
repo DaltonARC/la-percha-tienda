@@ -222,6 +222,30 @@ test("loadInstagramAccounts: JSON no-array (objeto) → re-siembra", () => {
   assert.deepEqual(loaded, [{ id: "ig_seed", username: "janicegp18" }]);
 });
 
+/* Edge cases del contrato viejo (receipt 5cb75c): "[]" guardado es vacío
+   legítimo y se respeta; cualquier otro resultado vacío re-siembra defaults. */
+test("loadInstagramAccounts: edge cases parametrizados", async (t) => {
+  const casos = [
+    { nombre: "[] guardado → no re-siembra (devuelve [])", guardado: "[]", esperado: [] },
+    { nombre: "[{}] → re-siembra", guardado: JSON.stringify([{}]), esperado: DEFAULT_ACCOUNTS },
+    { nombre: "[null] → re-siembra (sin crash)", guardado: JSON.stringify([null]), esperado: DEFAULT_ACCOUNTS },
+    { nombre: "corrupto → re-siembra", guardado: "{corrupt!!", esperado: DEFAULT_ACCOUNTS },
+    { nombre: "sin datos → re-siembra", guardado: null, esperado: DEFAULT_ACCOUNTS },
+  ];
+  for (const c of casos) {
+    await t.test(c.nombre, () => {
+      if (c.guardado === null) localStorage.removeItem(LS_IG_ACCOUNTS);
+      else localStorage.setItem(LS_IG_ACCOUNTS, c.guardado);
+      const loaded = loadInstagramAccounts(DEFAULT_ACCOUNTS);
+      assert.deepEqual(loaded, c.esperado);
+      if (c.guardado === "[]") {
+        // vacío legítimo: NO se sobreescribe el storage con los defaults
+        assert.equal(localStorage.getItem(LS_IG_ACCOUNTS), "[]");
+      }
+    });
+  }
+});
+
 /* =========================================================
    money
    ========================================================= */
