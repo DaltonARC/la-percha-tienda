@@ -21,8 +21,11 @@ la-percha-tienda/
 │   ├── main.js      # Lógica: render, carrito, admin, checkout por Instagram (ES module)
 │   └── lib.mjs      # Helpers puros/extraíbles (importable desde Node para tests)
 ├── server.js        # Dev server estático (sin dependencias)
-└── package.json     # Scripts + engines
+├── package.json     # Scripts + engines
+└── .receipts/       # Recibos RDD — solo local (untracked, ignorado por git)
 ```
+
+> **Recibos RDD (`.receipts/`)**: los recibos del flujo Receipt Driven Development **no se versionan**; viven únicamente en el working tree local, untracked e ignorados por `.gitignore`. El historial de git conserva los recibos antiguos ya commiteados en ramas previas.
 
 ## Requisitos
 
