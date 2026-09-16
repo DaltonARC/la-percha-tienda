@@ -38,15 +38,30 @@ export function seedInstagramAccounts(defaultAccounts){
   return seed;
 }
 export function loadInstagramAccounts(defaultAccounts){
+  // Delegar la persistencia/saneamiento a loadJSONStrict (helper genérico del PR #10).
+  // - sin datos / JSON corrupto / no-array → loadJSONStrict devuelve [] (fallback)
+  // - datos válidos (array) → devuelve el array parseado para normalizar/filtrar acá
   const raw = localStorage.getItem(LS_IG_ACCOUNTS);
-  if(!raw) return seedInstagramAccounts(defaultAccounts);
+  const parsed = loadJSONStrict(LS_IG_ACCOUNTS, []);
+  let accounts;
+  // Un array JSON válido puede traer elementos null/undefined (ej: "[null]"):
+  // el .map() lanzaría TypeError no capturado y crashearía main.js (carga de módulo).
+  // En el catch asignamos [] para que el branch de abajo re-siembre defaults
+  // (contrato del código viejo: catch genérico que re-sembraba). NO usar `return []`
+  // acá: un early-return cortaría antes de la re-siembra.
   try{
-    return JSON.parse(raw)
+    accounts = parsed
       .map(a => ({ id: a.id, username: normalizeUsername(a.username) }))
       .filter(a => isValidInstagramAccountId(a.id) && isValidInstagramUsername(a.username));
   }catch(e){
-    return seedInstagramAccounts(defaultAccounts);
+    accounts = []; // elemento inválido → re-siembra defaults abajo
   }
+  // Contrato del código viejo: "[]" guardado es vacío legítimo (admin borró todas
+  // las cuentas) y se respeta sin re-sembrar. Cualquier otro resultado vacío
+  // (elementos inválidos, basura, sin datos) re-siembra defaults.
+  if(accounts.length === 0 && raw === "[]") return [];
+  if(accounts.length === 0) return seedInstagramAccounts(defaultAccounts);
+  return accounts;
 }
 export function saveInstagramAccounts(list){ localStorage.setItem(LS_IG_ACCOUNTS, JSON.stringify(list)); }
 
