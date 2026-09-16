@@ -16,3 +16,6 @@ Thumbs.db
 # Entorno (proyecto estático; sin uso actual)
 .env
 .env.*
+
+# RDD — recibos del flujo Receipt Driven Development (solo local, no se versionan)
+.receipts/
