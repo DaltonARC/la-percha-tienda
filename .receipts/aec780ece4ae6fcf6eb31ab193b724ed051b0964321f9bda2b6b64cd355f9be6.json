@@ -1,0 +1,55 @@
+{
+  "tipo": "receipt",
+  "version": 1,
+  "fingerprint_final": "aec780ece4ae6fcf6eb31ab193b724ed051b0964321f9bda2b6b64cd355f9be6",
+  "timestamp": "2026-09-15T21:18:57-04:00",
+  "tarea": "fix/ig-accounts-loadjson — Re-ejecución gate RDD #3: validar la 2ª pasada de corrección autorizada ([] legítimo respetado; catch → re-siembra; firma intacta) + tests edge cases",
+  "plan_task_agent": "unificar saneamiento de loadInstagramAccounts con loadJSONStrict preservando el contrato EXACTO del código viejo ([] legítimo respetado; catch → re-siembra; firmas intactas) + tests edge cases. Correcciones autorizadas: (1) tras remate fc524cbc [TypeError con [null]]: envolver map/filter en try/catch que asigne [] en catch → re-siembra; (2) tras remate 5cb75c37 [re-siembra excesiva con []/[{}]/todo-inválido]: distinguir el '[]' explícito (vacío legítimo → respetar) de todo lo demás que quede vacío (basura → re-siembra), capturando raw ANTES de loadJSONStrict y comparando raw==='[]' — exactamente la sugerencia_correccion del recibo 5cb75c37.",
+  "archivos_afectados": ["js/lib.mjs", "test/lib.test.mjs"],
+  "lentes": {
+    "correctitud_bugs": {
+      "agente": "review-agent (INLINE — profundidad de subagentes limitada a 1 en el entorno; ver nota_operativa)",
+      "veredicto": "APROBADO",
+      "evidencia": "node --check js/lib.mjs && node --check test/lib.test.mjs → OK 0/0. npm test → '60 tests / 60 pass / 0 fail / duration_ms 563' exit 0 (incluye los 5 subtests nuevos parametrizados test/lib.test.mjs:227-254). Smoke contrato 9/9 (/tmp/opencode/smoke_contract.mjs → 'SMOKE: 9/9 ok, 0 fail'): []→[], [{}]→seed, [null]→seed (sin crash), [123]→seed, [texto]→seed, corrupto→seed, no-array→seed, sin-datos→seed, valido→normalizado. Comparación viejo vs nuevo (/tmp/opencode/old_vs_new3.mjs → 6 SAME / 3 DIFF autorizados): SAME en []/[null]/corrupto/no-array/sin-datos/valido; DIFF en [{}]/[123]/[texto] donde el viejo devolvía [] y el nuevo re-siembra (cambio semántico AUTORIZADO por smoke contract del usuario, ver hallazgos_no_bloqueantes H1). Verificado: (a) '[]' guardado → devuelve [] y NO sobreescribe storage (assert del test + smoke); (b) '[null]' → catch (lib.mjs:56-57) → accounts=[] → raw!=='[]' → seed (cerrado el TypeError no capturado de fc524cbc); (c) sin-datos: loadJSONStrict escribe '[]' y devuelve [] → raw===null → seed sobreescribe (estado final idéntico al viejo); (d) válido → normalizado sin reescribir storage; (e) seed fuera del try → un throw de seed propagaría igual que en el código viejo (sin cambio). Sin bugs funcionales ni de manejo de errores en el candidato."
+    },
+    "seguridad": {
+      "agente": "security-agent (INLINE — profundidad de subagentes limitada a 1 en el entorno; ver nota_operativa)",
+      "veredicto": "APROBADO",
+      "evidencia": "El saneamiento de los elementos que PASAN es idéntico al anterior: isValidInstagramAccountId ^[A-Za-z0-9_:-]{1,64}$ (js/lib.mjs:28-32) + isValidInstagramUsername ^[A-Za-z0-9._]{1,30}$ (js/lib.mjs:25-27) + normalizeUsername se aplican antes de que a.id/a.username lleguen a renderIgList (js/main.js:506-527, template strings en innerHTML y onclick='${a.id}'). La delegación en loadJSONStrict (js/lib.mjs:71-85) usa JSON.parse (sin eval), no ejecuta código; el fallback [] es un array plano sin claves peligrosas; los elementos __proto__/constructor del JSON se reemplazan por objetos nuevos {id, username} en el .map → sin vector de prototype pollution nuevo. Disponibilidad: el catch (js/lib.mjs:56-57) re-siembra en vez de crashear — cerrado el blocker de fc524cbc que rompía TODO main.js (carga de módulo js/main.js:82). Sin secretos/credenciales en el diff (solo lectura+saneo de localStorage same-origin). No se identificaron vectores nuevos."
+    },
+    "impacto_arquitectonico": {
+      "agente": "senior-review-agent modo análisis (INLINE — profundidad de subagentes limitada a 1 en el entorno; ver nota_operativa)",
+      "veredicto": "APROBADO",
+      "evidencia": "Grep repo: importadores REALES de loadInstagramAccounts/loadJSONStrict solo en js/main.js (import lib.mjs:13, wrapper 63-65, carga de módulo 82, exposure al window 627-630) y test/lib.test.mjs; README.md los documenta (línea 80). Sin otros consumidores (server.js/index.html no tocan estas funciones). Patrón del proyecto respetado: delegar en loadJSONStrict es coherente con PR #10 (js/main.js:45 loadProducts, js/main.js:49 cart); helpers puros en lib.mjs; tests con stub de localStorage (patrón de la suite). Firmas intactas: export function loadInstagramAccounts(defaultAccounts) (js/lib.mjs:40) idéntica a HEAD. Estado vacío legítimo → único representado por '[]' exacto: deleteInstagramAccount (js/main.js:585-597) guarda [] al borrar la última cuenta; al recargar raw==='[]' → devuelve [] → renderIgList muestra 'Aún no hay cuentas de Instagram.' (js/main.js:509-511) y getActiveInstagramAccount → null (js/main.js:66-76) deshabilita checkout (js/main.js:227). La auto-reparación de arrays con elementos inválidos ([{}]/[123]/[texto]) es el cambio semántico autorizado. Nota menor: en paths de fallo hay doble escritura a storage (loadJSONStrict escribe '[]' y luego seed sobreescribe) — estado final idéntico al código viejo (una sola escritura neta del seed)."
+    },
+    "adherencia_plan": {
+      "agente": "receipt-agent (lente 4)",
+      "veredicto": "APROBADO — sin desviaciones no autorizadas",
+      "evidencia": "1) Unifica con loadJSONStrict → js/lib.mjs:45 (parsed = loadJSONStrict(LS_IG_ACCOUNTS, [])). 2) '[]' legítimo respetado → js/lib.mjs:44 captura raw ANTES de loadJSONStrict y lib.mjs:62 'if(accounts.length === 0 && raw === \"[]\") return [];' — exactamente la sugerencia_correccion del recibo 5cb75c37. 3) catch → re-siembra → js/lib.mjs:52-58 (catch asigna []) + lib.mjs:63 (re-siembra si length===0). 4) Firmas intactas → js/lib.mjs:40. 5) Tests edge cases → test/lib.test.mjs:227-254 (5 subtests: []/[{}]/[null]/corrupto/sin-datos). 6) Smoke contract del usuario 9/9 verificado con /tmp/opencode/smoke_contract.mjs (output: 9/9 ok, 0 fail, exit 0). Antecedentes: fc524cbc (TypeError [null]) CERRADO (catch → seed, verificado old_vs_new3 SAME en [null]); 5cb75c37 (re-siembra excesiva ante []) CERRADO (raw==='[]' → [] sin re-sembrar, verificado smoke + test). Unica diferencia vs el literal 'contrato EXACTO del código viejo': [{}]/[123]/[texto] (viejo devolvía [], nuevo re-siembra) — explícitamente AUTORIZADO por el smoke contract del usuario ([{}]/[123]/[texto]→seed) y por la sugerencia del recibo 5cb75c37; registrado como H1 no-bloqueante."
+    }
+  },
+  "hallazgos_no_bloqueantes": [
+    {
+      "severidad": "MENOR",
+      "lente": "receipt-agent (transparencia de contrato)",
+      "descripcion": "El literal 'contrato EXACTO del código viejo' difiere en 3 inputs: [{}], [123] y [\"texto\"] — el código viejo (HEAD:js/lib.mjs) devolvía [] (el map no lanza, el filter los elimina), el nuevo re-siembra defaults. Es el cambio semántico AUTORIZADO: solo '[]' exacto (producido por JSON.stringify de una lista vacía vía saveInstagramAccounts) es vacío legítimo; arrays con elementos inválidos son basura → auto-reparación a seed. Documentado para trazabilidad.",
+      "evidencia": "/tmp/opencode/old_vs_new3.mjs → 'DIFF [{}] viejo: [] nuevo: seed', 'DIFF [123] viejo: [] nuevo: seed', 'DIFF [\"texto\"] viejo: [] nuevo: seed'. Contraste: recibo 5cb75c37 (bloqueante previo) exigía que [{}] devolviera [] como el viejo; el usuario, al autorizar la 2ª pasada, definió el smoke contract con [{}]→seed. La resolución acordada prioriza la auto-reparación de basura y el respeto estricto del '[]' explícito.",
+      "archivo_linea": "js/lib.mjs:62-63"
+    },
+    {
+      "severidad": "MENOR",
+      "lente": "correctitud_bugs",
+      "descripcion": "Doble escritura a localStorage en paths de fallo (sin-datos/corrupto/no-array): loadJSONStrict escribe el fallback '[]' (js/lib.mjs:73-75 / 80-82) y luego seedInstagramAccounts sobreescribe con los defaults (js/lib.mjs:63 → 33-39). Estado final idéntico al código viejo (neto: seed persistido); costo: 2 setItem en vez de 1. Sin impacto observable (los tests verifican la persistencia final).",
+      "evidencia": "js/lib.mjs:45 (loadJSONStrict con fallback []) + js/lib.mjs:63 (re-siembra); test/lib.test.mjs:203 y 216 validan storage final = seed. /tmp/opencode/smoke_contract.mjs verifica que en '[]' el storage NO se sobreescribe.",
+      "archivo_linea": "js/lib.mjs:45,63"
+    }
+  ],
+  "correccion": {
+    "hubo": false,
+    "lineas_modificadas": 0,
+    "que_se_corrigio": null,
+    "por_que_no": "Sin hallazgos BLOQUEANTES en ninguna lente contra el candidato congelado: no hubo envío nuevo a build-agent. Esta medición VALIDA la 2ª pasada de corrección autorizada que build-agent ya aplicó (el candidato actual es el resultado de esa corrección: raw capturado antes de loadJSONStrict + check raw==='[]' + try/catch sobre map/filter)."
+  },
+  "bloqueantes_pendientes": [],
+  "nota_operativa": "Lentes 1-3 ejecutadas INLINE por límite de profundidad de subagentes del entorno: el lanzamiento paralelo vía task tool devolvió 'Subagent depth limit reached (1)' en las 3 invocaciones (review-agent, security-agent, senior-review-agent). Mismo comportamiento que en los recibos fc524cbc y 5cb75c37; autorizado por el usuario ('inline si el entorno lo limita, como en receipts anteriores, documentándolo en nota_operativa'). Se preservó el criterio de cada lente (bugs/seguridad/impacto con evidencia reproducible) sin reimplementar ni aplicar fixes. Evidencia reproducible completa en /tmp/opencode/: smoke_contract.mjs (9/9), old_vs_new3.mjs (6 SAME / 3 DIFF autorizados), old_lib_export.mjs (réplica del código viejo desde git show HEAD:js/lib.mjs). Fingerprint verificado 3 veces durante el proceso (congelado ×2 + pre-emisión), siempre aec780ece4ae6fcf6eb31ab193b724ed051b0964321f9bda2b6b64cd355f9be6; working tree quieto."
+}
